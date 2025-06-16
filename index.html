@@ -1,61 +1,213 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>한민고 익명 건의함</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <title>한민고 익명 건의함 (Firebase 연동)</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+    body {
+      padding: 2rem;
+      max-width: 768px;
+      margin: auto;
+    }
+    .badge-pri-1 {
+      background-color: #dc3545;
+    }
+    .badge-pri-2 {
+      background-color: #fd7e14;
+    }
+    .badge-pri-3 {
+      background-color: #198754;
+    }
+    .badge-etc {
+      background-color: #6c757d;
+    }
+  </style>
+</head>
+<body>
+  <h1 class="mb-4">한민고 익명 건의함</h1>
+  <div class="mb-3">
+    <button class="btn btn-outline-primary me-2" onclick="switchMode('student')">학생용</button>
+    <button class="btn btn-outline-secondary" onclick="switchMode('login')">관리자 로그인</button>
+  </div>
+
+  <div id="studentSection" style="display:none">
+    <textarea
+      class="form-control"
+      id="suggestionInput"
+      rows="4"
+      placeholder="불편 사항이나 건의 내용을 입력하세요."
+    ></textarea>
+    <button class="btn btn-primary mt-2 w-100" onclick="submitSuggestion()">
+      익명 건의 제출
+    </button>
+    <p id="feedbackMsg" class="mt-2"></p>
+  </div>
+
+  <div id="loginSection" style="display:none">
+    <input
+      type="password"
+      class="form-control"
+      id="adminPassword"
+      placeholder="관리자 비밀번호 입력"
+    />
+    <button class="btn btn-dark mt-2 w-100" onclick="tryLogin()">로그인</button>
+  </div>
+
+  <div id="adminSection" style="display:none">
+    <div class="mt-4 mb-3">
+      <button
+        class="btn btn-sm btn-outline-dark me-1"
+        onclick="filterSuggestions('전체')"
+      >
+        전체
+      </button>
+      <button
+        class="btn btn-sm btn-outline-danger me-1"
+        onclick="filterSuggestions('1순위')"
+      >
+        1순위
+      </button>
+      <button
+        class="btn btn-sm btn-outline-warning me-1"
+        onclick="filterSuggestions('2순위')"
+      >
+        2순위
+      </button>
+      <button
+        class="btn btn-sm btn-outline-success me-1"
+        onclick="filterSuggestions('3순위')"
+      >
+        3순위
+      </button>
+      <button
+        class="btn btn-sm btn-outline-secondary"
+        onclick="filterSuggestions('기타')"
+      >
+        기타
+      </button>
+    </div>
+    <div id="suggestionList"></div>
+  </div>
+
+  <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+    import {
+      getDatabase,
+      ref,
+      push,
+      onValue,
+      set,
+      remove,
+      update,
+    } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB9I3_Grazqb6mtCcFAhUT-LLHIq2ssyD8",
       authDomain: "hanminsuggestion.firebaseapp.com",
-      databaseURL: "https://hanminsuggestion-default-rtdb.asia-southeast1.firebasedatabase.app",
+      databaseURL:
+        "https://hanminsuggestion-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "hanminsuggestion",
       storageBucket: "hanminsuggestion.firebasestorage.app",
       messagingSenderId: "57223153782",
-      appId: "1:57223153782:web:1e783e95e3b3abd1bd3757"
+      appId: "1:57223153782:web:1e783e95e3b3abd1bd3757",
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
+    // --- 기존 스크립트 여기에 삽입 (변경된 부분만)
+
     const categories = {
       건강: ["두통", "복통", "어지럼", "건강", "아픔"],
       인권: ["괴롭힘", "차별", "폭력", "학폭", "따돌림"],
       시설: ["고장", "파손", "의자", "책상", "에어컨", "화장실"],
-      건의: ["제안", "건의", "요청"]
+      건의: ["제안", "건의", "요청"],
     };
-    const badWords = ["씨발", "ㅅㅂ", "병신", "좆", "fuck", "shit", "애미", "애비", "죽어", "자살", "윤석열", "문재인", "이재명", "빨갱이", "페미", "메갈", "장애", "강간", "몰카", "테러", "패드립", "미친", "개같", "정신병자", "정신나간", "개새끼", "게이", "호모", "레즈", "홍어", "X발", "지랄", "여혐", "남혐", "성희롱"];
+
+    const badWords = [
+      "씨발",
+      "ㅅㅂ",
+      "병신",
+      "좆",
+      "fuck",
+      "shit",
+      "애미",
+      "애비",
+      "죽어",
+      "자살",
+      "윤석열",
+      "문재인",
+      "이재명",
+      "빨갱이",
+      "페미",
+      "메갈",
+      "장애",
+      "강간",
+      "몰카",
+      "테러",
+      "패드립",
+      "미친",
+      "개같",
+      "정신병자",
+      "정신나간",
+      "개새끼",
+      "게이",
+      "호모",
+      "레즈",
+      "홍어",
+      "X발",
+      "지랄",
+      "여혐",
+      "남혐",
+      "성희롱",
+    ];
 
     let currentFilter = "전체";
+    let suggestions = {};
 
     function audit(text) {
-      return badWords.some(bad => text.includes(bad));
+      return badWords.some((bad) => text.includes(bad));
     }
+
     function classify(text) {
       for (const cat in categories) {
-        if (categories[cat].some(word => text.includes(word))) return cat;
+        if (categories[cat].some((word) => text.includes(word))) return cat;
       }
       return "기타";
     }
+
     function determinePriority(text) {
-      if (categories.건강.concat(categories.인권).some(k => text.includes(k))) return "1순위";
-      if (categories.시설.some(k => text.includes(k))) return "2순위";
-      if (categories.건의.some(k => text.includes(k))) return "3순위";
+      if (
+        categories.건강.concat(categories.인권).some((k) => text.includes(k))
+      )
+        return "1순위";
+      if (categories.시설.some((k) => text.includes(k))) return "2순위";
+      if (categories.건의.some((k) => text.includes(k))) return "3순위";
       return "기타";
     }
-    window.switchMode = (mode) => {
-      document.getElementById("studentSection").style.display = (mode === 'student') ? 'block' : 'none';
-      document.getElementById("loginSection").style.display = (mode === 'login') ? 'block' : 'none';
-      document.getElementById("adminSection").style.display = (mode === 'admin') ? 'block' : 'none';
+
+    function switchMode(mode) {
+      document.getElementById("studentSection").style.display =
+        mode === "student" ? "block" : "none";
+      document.getElementById("loginSection").style.display =
+        mode === "login" ? "block" : "none";
+      document.getElementById("adminSection").style.display =
+        mode === "admin" ? "block" : "none";
       document.getElementById("feedbackMsg").textContent = "";
     }
-    window.submitSuggestion = async () => {
+
+    function submitSuggestion() {
       const input = document.getElementById("suggestionInput").value.trim();
       const msg = document.getElementById("feedbackMsg");
-      if (!input) return msg.textContent = "내용을 입력하세요.";
+      if (!input) {
+        msg.textContent = "내용을 입력하세요.";
+        return;
+      }
       if (audit(input)) {
         msg.textContent = "부적절한 내용이 포함되어 자동 삭제되었습니다.";
         return;
@@ -65,104 +217,99 @@
         category: classify(input),
         priority: determinePriority(input),
         status: "처리안됨",
-        result: ""
+        result: "",
       };
-      await push(ref(db, "suggestions"), item);
-      msg.textContent = "건의가 접수되었습니다.";
-      document.getElementById("suggestionInput").value = "";
+
+      // Firebase DB에 저장
+      push(ref(db, "suggestions"), item)
+        .then(() => {
+          msg.textContent = "건의가 접수되었습니다.";
+          document.getElementById("suggestionInput").value = "";
+        })
+        .catch(() => {
+          msg.textContent = "오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+        });
     }
-    window.tryLogin = () => {
+
+    function tryLogin() {
       const pw = document.getElementById("adminPassword").value;
       if (pw === "gksrnrtktngod") {
         switchMode("admin");
-        renderSuggestions();
+        loadSuggestions();
       } else {
         alert("비밀번호가 틀렸습니다.");
       }
     }
+
+    function loadSuggestions() {
+      const list = document.getElementById("suggestionList");
+      list.innerHTML = "";
+      // 실시간 DB 감지
+      const suggestionsRef = ref(db, "suggestions");
+      onValue(
+        suggestionsRef,
+        (snapshot) => {
+          suggestions = snapshot.val() || {};
+          renderSuggestions();
+        },
+        { onlyOnce: false }
+      );
+    }
+
     function renderSuggestions() {
       const list = document.getElementById("suggestionList");
       list.innerHTML = "";
-      onValue(ref(db, "suggestions"), (snapshot) => {
-        list.innerHTML = "";
-        const data = snapshot.val();
-        for (let key in data) {
-          const s = data[key];
-          if (currentFilter !== "전체" && s.priority !== currentFilter) continue;
+      Object.entries(suggestions)
+        .filter(([key, s]) => currentFilter === "전체" || s.priority === currentFilter)
+        .forEach(([key, s]) => {
           const wrapper = document.createElement("div");
           wrapper.className = "card p-3 mb-2";
-          let badgeClass = 'badge-etc';
-          if (s.priority === '1순위') badgeClass = 'badge-pri-1';
-          else if (s.priority === '2순위') badgeClass = 'badge-pri-2';
-          else if (s.priority === '3순위') badgeClass = 'badge-pri-3';
+
+          let badgeClass = "badge-etc";
+          if (s.priority === "1순위") badgeClass = "badge-pri-1";
+          else if (s.priority === "2순위") badgeClass = "badge-pri-2";
+          else if (s.priority === "3순위") badgeClass = "badge-pri-3";
+
           wrapper.innerHTML = `
-            <div><span class="badge ${badgeClass}">${s.priority}</span> <span class="badge bg-light text-dark">\${s.category}</span></div>
-            <p class="mt-2">\${s.content}</p>
-            <textarea class="form-control mt-2" rows="2" placeholder="처리 결과 입력" onchange="updateResult('\${key}', this.value)">\${s.result}</textarea>
+            <div><span class="badge ${badgeClass}">${s.priority}</span> <span class="badge bg-light text-dark">${s.category}</span></div>
+            <p class="mt-2">${s.content}</p>
+            <textarea class="form-control mt-2" rows="2" placeholder="처리 결과 입력" onchange="updateResult('${key}', this.value)">${s.result || ''}</textarea>
             <div class="d-flex justify-content-between mt-2">
-              <span class="text-muted">상태: \${s.status || '처리안됨'}</span>
+              <span class="text-muted">상태: ${s.status || '처리안됨'}</span>
               <div>
-                <button class="btn btn-sm btn-success me-1" onclick="markProcessed('\${key}')">처리됨</button>
-                <button class="btn btn-sm btn-secondary me-1" onclick="markUnprocessed('\${key}')">처리안됨</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteSuggestion('\${key}')">삭제</button>
+                <button class="btn btn-sm btn-success me-1" onclick="markProcessed('${key}')">처리됨</button>
+                <button class="btn btn-sm btn-secondary me-1" onclick="markUnprocessed('${key}')">처리안됨</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSuggestion('${key}')">삭제</button>
               </div>
             </div>
           `;
           list.appendChild(wrapper);
-        }
-      });
+        });
     }
-    window.updateResult = (key, value) => {
-      update(ref(db, `suggestions/${key}`), { result: value });
+
+    function updateResult(key, value) {
+      update(ref(db, "suggestions/" + key), { result: value });
     }
-    window.markProcessed = (key) => {
-      update(ref(db, `suggestions/${key}`), { status: "처리됨" });
+
+    function markProcessed(key) {
+      update(ref(db, "suggestions/" + key), { status: "처리됨" });
     }
-    window.markUnprocessed = (key) => {
-      update(ref(db, `suggestions/${key}`), { status: "처리안됨" });
+
+    function markUnprocessed(key) {
+      update(ref(db, "suggestions/" + key), { status: "처리안됨" });
     }
-    window.deleteSuggestion = (key) => {
-      remove(ref(db, `suggestions/${key}`));
+
+    function deleteSuggestion(key) {
+      remove(ref(db, "suggestions/" + key));
     }
-    window.filterSuggestions = (p) => {
+
+    function filterSuggestions(p) {
       currentFilter = p;
       renderSuggestions();
     }
-    switchMode('student');
+
+    // 초기 모드
+    switchMode("student");
   </script>
-  <style>
-    body { padding: 2rem; max-width: 768px; margin: auto; }
-    .badge-pri-1 { background-color: #dc3545; }
-    .badge-pri-2 { background-color: #fd7e14; }
-    .badge-pri-3 { background-color: #198754; }
-    .badge-etc { background-color: #6c757d; }
-  </style>
-</head>
-<body>
-<h1 class="mb-4">한민고 익명 건의함</h1>
-<div class="mb-3">
-  <button class="btn btn-outline-primary me-2" onclick="switchMode('student')">학생용</button>
-  <button class="btn btn-outline-secondary" onclick="switchMode('login')">관리자 로그인</button>
-</div>
-<div id="studentSection" style="display:none">
-  <textarea class="form-control" id="suggestionInput" rows="4" placeholder="불편 사항이나 건의 내용을 입력하세요."></textarea>
-  <button class="btn btn-primary mt-2 w-100" onclick="submitSuggestion()">익명 건의 제출</button>
-  <p id="feedbackMsg" class="mt-2"></p>
-</div>
-<div id="loginSection" style="display:none">
-  <input type="password" class="form-control" id="adminPassword" placeholder="관리자 비밀번호 입력">
-  <button class="btn btn-dark mt-2 w-100" onclick="tryLogin()">로그인</button>
-</div>
-<div id="adminSection" style="display:none">
-  <div class="mt-4 mb-3">
-    <button class="btn btn-sm btn-outline-dark me-1" onclick="filterSuggestions('전체')">전체</button>
-    <button class="btn btn-sm btn-outline-danger me-1" onclick="filterSuggestions('1순위')">1순위</button>
-    <button class="btn btn-sm btn-outline-warning me-1" onclick="filterSuggestions('2순위')">2순위</button>
-    <button class="btn btn-sm btn-outline-success me-1" onclick="filterSuggestions('3순위')">3순위</button>
-    <button class="btn btn-sm btn-outline-secondary" onclick="filterSuggestions('기타')">기타</button>
-  </div>
-  <div id="suggestionList"></div>
-</div>
 </body>
 </html>
-
