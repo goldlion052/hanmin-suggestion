@@ -4,6 +4,132 @@
   <meta charset="UTF-8">
   <title>한민고 익명 건의함</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+    import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB9I3_Grazqb6mtCcFAhUT-LLHIq2ssyD8",
+      authDomain: "hanminsuggestion.firebaseapp.com",
+      databaseURL: "https://hanminsuggestion-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "hanminsuggestion",
+      storageBucket: "hanminsuggestion.firebasestorage.app",
+      messagingSenderId: "57223153782",
+      appId: "1:57223153782:web:1e783e95e3b3abd1bd3757"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const categories = {
+      건강: ["두통", "복통", "어지럼", "건강", "아픔"],
+      인권: ["괴롭힘", "차별", "폭력", "학폭", "따돌림"],
+      시설: ["고장", "파손", "의자", "책상", "에어컨", "화장실"],
+      건의: ["제안", "건의", "요청"]
+    };
+    const badWords = ["씨발", "ㅅㅂ", "병신", "좆", "fuck", "shit", "애미", "애비", "죽어", "자살", "윤석열", "문재인", "이재명", "빨갱이", "페미", "메갈", "장애", "강간", "몰카", "테러", "패드립", "미친", "개같", "정신병자", "정신나간", "개새끼", "게이", "호모", "레즈", "홍어", "X발", "지랄", "여혐", "남혐", "성희롱"];
+
+    let currentFilter = "전체";
+
+    function audit(text) {
+      return badWords.some(bad => text.includes(bad));
+    }
+    function classify(text) {
+      for (const cat in categories) {
+        if (categories[cat].some(word => text.includes(word))) return cat;
+      }
+      return "기타";
+    }
+    function determinePriority(text) {
+      if (categories.건강.concat(categories.인권).some(k => text.includes(k))) return "1순위";
+      if (categories.시설.some(k => text.includes(k))) return "2순위";
+      if (categories.건의.some(k => text.includes(k))) return "3순위";
+      return "기타";
+    }
+    window.switchMode = (mode) => {
+      document.getElementById("studentSection").style.display = (mode === 'student') ? 'block' : 'none';
+      document.getElementById("loginSection").style.display = (mode === 'login') ? 'block' : 'none';
+      document.getElementById("adminSection").style.display = (mode === 'admin') ? 'block' : 'none';
+      document.getElementById("feedbackMsg").textContent = "";
+    }
+    window.submitSuggestion = async () => {
+      const input = document.getElementById("suggestionInput").value.trim();
+      const msg = document.getElementById("feedbackMsg");
+      if (!input) return msg.textContent = "내용을 입력하세요.";
+      if (audit(input)) {
+        msg.textContent = "부적절한 내용이 포함되어 자동 삭제되었습니다.";
+        return;
+      }
+      const item = {
+        content: input,
+        category: classify(input),
+        priority: determinePriority(input),
+        status: "처리안됨",
+        result: ""
+      };
+      await push(ref(db, "suggestions"), item);
+      msg.textContent = "건의가 접수되었습니다.";
+      document.getElementById("suggestionInput").value = "";
+    }
+    window.tryLogin = () => {
+      const pw = document.getElementById("adminPassword").value;
+      if (pw === "gksrnrtktngod") {
+        switchMode("admin");
+        renderSuggestions();
+      } else {
+        alert("비밀번호가 틀렸습니다.");
+      }
+    }
+    function renderSuggestions() {
+      const list = document.getElementById("suggestionList");
+      list.innerHTML = "";
+      onValue(ref(db, "suggestions"), (snapshot) => {
+        list.innerHTML = "";
+        const data = snapshot.val();
+        for (let key in data) {
+          const s = data[key];
+          if (currentFilter !== "전체" && s.priority !== currentFilter) continue;
+          const wrapper = document.createElement("div");
+          wrapper.className = "card p-3 mb-2";
+          let badgeClass = 'badge-etc';
+          if (s.priority === '1순위') badgeClass = 'badge-pri-1';
+          else if (s.priority === '2순위') badgeClass = 'badge-pri-2';
+          else if (s.priority === '3순위') badgeClass = 'badge-pri-3';
+          wrapper.innerHTML = `
+            <div><span class="badge ${badgeClass}">${s.priority}</span> <span class="badge bg-light text-dark">\${s.category}</span></div>
+            <p class="mt-2">\${s.content}</p>
+            <textarea class="form-control mt-2" rows="2" placeholder="처리 결과 입력" onchange="updateResult('\${key}', this.value)">\${s.result}</textarea>
+            <div class="d-flex justify-content-between mt-2">
+              <span class="text-muted">상태: \${s.status || '처리안됨'}</span>
+              <div>
+                <button class="btn btn-sm btn-success me-1" onclick="markProcessed('\${key}')">처리됨</button>
+                <button class="btn btn-sm btn-secondary me-1" onclick="markUnprocessed('\${key}')">처리안됨</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSuggestion('\${key}')">삭제</button>
+              </div>
+            </div>
+          `;
+          list.appendChild(wrapper);
+        }
+      });
+    }
+    window.updateResult = (key, value) => {
+      update(ref(db, `suggestions/${key}`), { result: value });
+    }
+    window.markProcessed = (key) => {
+      update(ref(db, `suggestions/${key}`), { status: "처리됨" });
+    }
+    window.markUnprocessed = (key) => {
+      update(ref(db, `suggestions/${key}`), { status: "처리안됨" });
+    }
+    window.deleteSuggestion = (key) => {
+      remove(ref(db, `suggestions/${key}`));
+    }
+    window.filterSuggestions = (p) => {
+      currentFilter = p;
+      renderSuggestions();
+    }
+    switchMode('student');
+  </script>
   <style>
     body { padding: 2rem; max-width: 768px; margin: auto; }
     .badge-pri-1 { background-color: #dc3545; }
@@ -37,116 +163,6 @@
   </div>
   <div id="suggestionList"></div>
 </div>
-<script>
-const categories = {
-  건강: ["두통", "복통", "어지럼", "건강", "아픔"],
-  인권: ["괴롭힘", "차별", "폭력", "학폭", "따돌림"],
-  시설: ["고장", "파손", "의자", "책상", "에어컨", "화장실"],
-  건의: ["제안", "건의", "요청"]
-};
-const badWords = ["씨발", "ㅅㅂ", "병신", "좆", "fuck", "shit", "애미", "애비", "죽어", "자살", "윤석열", "문재인", "이재명", "빨갱이", "페미", "메갈", "장애", "강간", "몰카", "테러", "패드립", "미친", "개같", "정신병자", "정신나간", "개새끼", "게이", "호모", "레즈", "홍어", "X발", "지랄", "여혐", "남혐", "성희롱"];
-let suggestions = JSON.parse(localStorage.getItem("suggestions") || "[]");
-let currentFilter = "전체";
-function audit(text) {
-  return badWords.some(bad => text.includes(bad));
-}
-function classify(text) {
-  for (const cat in categories) {
-    if (categories[cat].some(word => text.includes(word))) return cat;
-  }
-  return "기타";
-}
-function determinePriority(text) {
-  if (categories.건강.concat(categories.인권).some(k => text.includes(k))) return "1순위";
-  if (categories.시설.some(k => text.includes(k))) return "2순위";
-  if (categories.건의.some(k => text.includes(k))) return "3순위";
-  return "기타";
-}
-function switchMode(mode) {
-  document.getElementById("studentSection").style.display = (mode === 'student') ? 'block' : 'none';
-  document.getElementById("loginSection").style.display = (mode === 'login') ? 'block' : 'none';
-  document.getElementById("adminSection").style.display = (mode === 'admin') ? 'block' : 'none';
-  document.getElementById("feedbackMsg").textContent = "";
-}
-function submitSuggestion() {
-  const input = document.getElementById("suggestionInput").value.trim();
-  const msg = document.getElementById("feedbackMsg");
-  if (!input) return msg.textContent = "내용을 입력하세요.";
-  if (audit(input)) {
-    msg.textContent = "부적절한 내용이 포함되어 자동 삭제되었습니다.";
-    return;
-  }
-  const item = {
-    content: input,
-    category: classify(input),
-    priority: determinePriority(input),
-    status: "처리안됨",
-    result: ""
-  };
-  suggestions.push(item);
-  localStorage.setItem("suggestions", JSON.stringify(suggestions));
-  msg.textContent = "건의가 접수되었습니다.";
-  document.getElementById("suggestionInput").value = "";
-}
-function tryLogin() {
-  const pw = document.getElementById("adminPassword").value;
-  if (pw === "gksrnrtktngod") {
-    switchMode("admin");
-    renderSuggestions();
-  } else {
-    alert("비밀번호가 틀렸습니다.");
-  }
-}
-function renderSuggestions() {
-  const list = document.getElementById("suggestionList");
-  list.innerHTML = "";
-  suggestions.filter(s => currentFilter === "전체" || s.priority === currentFilter).forEach((s, i) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "card p-3 mb-2";
-    let badgeClass = 'badge-etc';
-    if (s.priority === '1순위') badgeClass = 'badge-pri-1';
-    else if (s.priority === '2순위') badgeClass = 'badge-pri-2';
-    else if (s.priority === '3순위') badgeClass = 'badge-pri-3';
-    wrapper.innerHTML = `
-      <div><span class="badge ${badgeClass}">${s.priority}</span> <span class="badge bg-light text-dark">${s.category}</span></div>
-      <p class="mt-2">${s.content}</p>
-      <textarea class="form-control mt-2" rows="2" placeholder="처리 결과 입력" onchange="updateResult(${i}, this.value)">${s.result}</textarea>
-      <div class="d-flex justify-content-between mt-2">
-        <span class="text-muted">상태: ${s.status || '처리안됨'}</span>
-        <div>
-          <button class="btn btn-sm btn-success me-1" onclick="markProcessed(${i})">처리됨</button>
-          <button class="btn btn-sm btn-secondary me-1" onclick="markUnprocessed(${i})">처리안됨</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteSuggestion(${i})">삭제</button>
-        </div>
-      </div>
-    `;
-    list.appendChild(wrapper);
-  });
-}
-function updateResult(i, value) {
-  suggestions[i].result = value;
-  localStorage.setItem("suggestions", JSON.stringify(suggestions));
-}
-function markProcessed(i) {
-  suggestions[i].status = "처리됨";
-  localStorage.setItem("suggestions", JSON.stringify(suggestions));
-  renderSuggestions();
-}
-function markUnprocessed(i) {
-  suggestions[i].status = "처리안됨";
-  localStorage.setItem("suggestions", JSON.stringify(suggestions));
-  renderSuggestions();
-}
-function deleteSuggestion(i) {
-  suggestions.splice(i, 1);
-  localStorage.setItem("suggestions", JSON.stringify(suggestions));
-  renderSuggestions();
-}
-function filterSuggestions(p) {
-  currentFilter = p;
-  renderSuggestions();
-}
-switchMode('student');
-</script>
 </body>
 </html>
+
